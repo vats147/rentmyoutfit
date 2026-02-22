@@ -28,8 +28,10 @@ import { Switch } from '@/components/ui/switch';
 import { useAuthStore } from '@/stores';
 import { CATEGORIES, EVENT_TAGS, SIZES, FABRICS, CONDITIONS, COLORS, PLATFORM_CONFIG } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import type { Listing } from '@/types';
 
 interface ListOutfitFormProps {
+  initialData?: Partial<Listing>;
   onComplete?: () => void;
   onCancel?: () => void;
 }
@@ -43,31 +45,35 @@ const STEPS = [
   { id: 6, title: 'Delivery', description: 'Delivery options' },
 ];
 
-export function ListOutfitForm({ onComplete, onCancel }: ListOutfitFormProps) {
+export function ListOutfitForm({ initialData, onComplete, onCancel }: ListOutfitFormProps) {
   const { user, isAuthenticated } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
-  const [images, setImages] = useState<string[]>([]);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [gender, setGender] = useState<'women' | 'men' | 'kids'>('women');
-  const [category, setCategory] = useState('');
-  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
-  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [images, setImages] = useState<string[]>(initialData?.images?.map(img => img.url) || []);
+  const [title, setTitle] = useState(initialData?.title || '');
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [gender, setGender] = useState<'women' | 'men' | 'kids'>(initialData?.gender || 'women');
+  const [category, setCategory] = useState(initialData?.category || '');
+  const [selectedEvents, setSelectedEvents] = useState<string[]>(initialData?.eventTags || []);
+  const [customTags, setCustomTags] = useState<string[]>(initialData?.customTags || []);
   const [newTag, setNewTag] = useState('');
-  const [size, setSize] = useState('');
-  const [measurements, setMeasurements] = useState({ waist: '', chest: '', length: '' });
-  const [color, setColor] = useState('');
-  const [fabric, setFabric] = useState('');
-  const [condition, setCondition] = useState<'like_new' | 'good' | 'fair'>('good');
-  const [pricePerDay, setPricePerDay] = useState('');
-  const [pricePerWeek, setPricePerWeek] = useState('');
-  const [deposit, setDeposit] = useState('');
-  const [deliveryType, setDeliveryType] = useState<'pickup' | 'delivery' | 'both'>('pickup');
-  const [serviceRadius, setServiceRadius] = useState([5]);
-  const [deliveryCharge, setDeliveryCharge] = useState('');
+  const [size, setSize] = useState(initialData?.size || '');
+  const [measurements, setMeasurements] = useState({
+    waist: initialData?.measurements?.waist?.toString() || '',
+    chest: initialData?.measurements?.chest?.toString() || '',
+    length: initialData?.measurements?.length?.toString() || ''
+  });
+  const [color, setColor] = useState(initialData?.color || '');
+  const [fabric, setFabric] = useState(initialData?.fabric || '');
+  const [condition, setCondition] = useState<'like_new' | 'good' | 'fair'>(initialData?.condition || 'good');
+  const [pricePerDay, setPricePerDay] = useState(initialData?.pricePerDay?.toString() || '');
+  const [pricePerWeek, setPricePerWeek] = useState(initialData?.pricePerWeek?.toString() || '');
+  const [deposit, setDeposit] = useState(initialData?.deposit?.toString() || '');
+  const [deliveryType, setDeliveryType] = useState<'pickup' | 'delivery' | 'both'>(initialData?.deliveryType || 'pickup');
+  const [serviceRadius, setServiceRadius] = useState([initialData?.serviceRadius || 5]);
+  const [deliveryCharge, setDeliveryCharge] = useState(initialData?.deliveryCharge?.toString() || '');
 
   const progress = ((currentStep - 1) / STEPS.length) * 100;
 
@@ -122,8 +128,11 @@ export function ListOutfitForm({ onComplete, onCancel }: ListOutfitFormProps) {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/listings', {
-        method: 'POST',
+      const url = initialData?.id ? `/api/listings/${initialData.id}` : '/api/listings';
+      const method = initialData?.id ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
@@ -799,7 +808,7 @@ export function ListOutfitForm({ onComplete, onCancel }: ListOutfitFormProps) {
               disabled={!canProceed() || isSubmitting}
               className="flex-1 bg-[#1B4332] hover:bg-[#2D6A4F]"
             >
-              {isSubmitting ? 'Publishing...' : 'Publish Listing'}
+              {isSubmitting ? (initialData ? 'Updating...' : 'Publishing...') : (initialData ? 'Update Listing' : 'Publish Listing')}
             </Button>
           )}
         </div>

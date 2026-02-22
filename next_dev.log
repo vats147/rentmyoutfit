@@ -4,11 +4,44 @@
 - Environments: .env.local
 
 ✓ Starting...
-✓ Ready in 1121ms
+✓ Ready in 2.9s
 ○ Compiling / ...
- GET / 200 in 8.7s (compile: 7.6s, render: 1020ms)
- GET / 200 in 250ms (compile: 26ms, render: 225ms)
- GET /admin/listings 200 in 1219ms (compile: 1017ms, render: 202ms)
- GET /near-me 200 in 2.6s (compile: 2.3s, render: 238ms)
- GET /near-me 200 in 109ms (compile: 7ms, render: 102ms)
-  Reload env: .env.local
+⨯ Error: supabaseUrl is required.
+    at module evaluation (src/lib/supabase.ts:6:37)
+    at module evaluation (src/stores/auth-store.ts:3:1)
+    at module evaluation (src/stores/index.ts:1:1)
+    at module evaluation (src/app/page.tsx:21:1)
+  4 | const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  5 |
+> 6 | export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    |                                     ^
+  7 | {
+  digest: '872092733'
+}
+ GET / 500 in 6.2s (compile: 3.6s, render: 2.6s)
+⨯ Error: supabaseUrl is required.
+    at module evaluation (src/lib/supabase.ts:6:37)
+    at module evaluation (src/stores/auth-store.ts:3:1)
+    at module evaluation (src/stores/index.ts:1:1)
+    at module evaluation (src/app/page.tsx:21:1)
+  4 | const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  5 |
+> 6 | export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    |                                     ^
+  7 | {
+  digest: '872092733'
+}
+ GET / 500 in 1048ms (compile: 11ms, render: 1037ms)
+⨯ Error: supabaseUrl is required.
+    at module evaluation (src/lib/supabase.ts:6:37)
+    at module evaluation (src/stores/auth-store.ts:3:1)
+    at module evaluation (src/stores/index.ts:1:1)
+    at module evaluation (src/app/page.tsx:21:1)
+  4 | const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  5 |
+> 6 | export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    |                                     ^
+  7 | {
+  digest: '872092733'
+}
+ GET /admin/listings 500 in 683ms (compile: 49ms, render: 634ms)

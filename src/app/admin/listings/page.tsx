@@ -11,8 +11,11 @@ import {
     ShoppingBag,
     Tag,
     User,
-    Trash2
+    Trash2,
+    Plus,
+    Pencil
 } from "lucide-react";
+import { ListOutfitForm } from "@/components/listings/list-outfit-form";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -52,6 +55,8 @@ export default function AdminListingsPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [editingListing, setEditingListing] = useState<Listing | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
         // Mock data for now - will connect to real API
@@ -71,9 +76,18 @@ export default function AdminListingsPage() {
         l.seller.toLowerCase().includes(searchQuery.toLowerCase())
     ), [listings, searchQuery]);
 
-    const handleDelete = (id: string) => {
-        setListings(prev => prev.filter(l => l.id !== id));
-        setDeletingId(null);
+    const handleDelete = async (id: string) => {
+        try {
+            // Optimistic update
+            setListings(prev => prev.filter(l => l.id !== id));
+            setDeletingId(null);
+
+            // API call
+            await fetch(`/api/listings/${id}`, { method: 'DELETE' });
+        } catch (error) {
+            console.error("Failed to delete listing", error);
+            // Optionally revert state here if needed
+        }
     };
 
     return (
@@ -97,6 +111,10 @@ export default function AdminListingsPage() {
                     <Button variant="outline" className="bg-white">
                         <Filter className="w-4 h-4 mr-2" />
                         Filter
+                    </Button>
+                    <Button className="bg-brand-primary text-white hover:bg-brand-primary/90" onClick={() => setIsCreating(true)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Listing
                     </Button>
                 </div>
             </div>
@@ -174,6 +192,14 @@ export default function AdminListingsPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
+                                                className="h-8 w-8 hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                                onClick={() => setEditingListing(listing)}
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
                                                 className="h-8 w-8 hover:bg-red-50 text-slate-400 hover:text-red-600"
                                                 onClick={() => setDeletingId(listing.id)}
                                             >
@@ -208,6 +234,26 @@ export default function AdminListingsPage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </div>
+
+        {/* Create/Edit Form */}
+        {(isCreating || editingListing) && (
+            <ListOutfitForm
+                initialData={editingListing ? {
+                    ...editingListing,
+                    // Map fields if necessary, as local Listing type is minimal
+                    pricePerDay: editingListing.price
+                } as any : undefined}
+                onComplete={() => {
+                    setIsCreating(false);
+                    setEditingListing(null);
+                    // Refresh listings or update local state
+                }}
+                onCancel={() => {
+                    setIsCreating(false);
+                    setEditingListing(null);
+                }}
+            />
+        )}
         </AlertDialog>
     );
 }
