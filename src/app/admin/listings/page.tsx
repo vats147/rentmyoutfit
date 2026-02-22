@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
     Search,
     Filter,
@@ -10,8 +10,22 @@ import {
     XCircle,
     ShoppingBag,
     Tag,
-    User
+    User,
+    Trash2,
+    Plus,
+    Pencil
 } from "lucide-react";
+import { ListOutfitForm } from "@/components/listings/list-outfit-form";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
     Table,
@@ -40,6 +54,9 @@ export default function AdminListingsPage() {
     const [listings, setListings] = useState<Listing[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [editingListing, setEditingListing] = useState<Listing | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
         // Mock data for now - will connect to real API
@@ -54,12 +71,27 @@ export default function AdminListingsPage() {
         }, 800);
     }, []);
 
-    const filteredListings = listings.filter(l =>
+    const filteredListings = useMemo(() => listings.filter(l =>
         l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.seller.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    ), [listings, searchQuery]);
+
+    const handleDelete = async (id: string) => {
+        try {
+            // Optimistic update
+            setListings(prev => prev.filter(l => l.id !== id));
+            setDeletingId(null);
+
+            // API call
+            await fetch(`/api/listings/${id}`, { method: 'DELETE' });
+        } catch (error) {
+            console.error("Failed to delete listing", error);
+            // Optionally revert state here if needed
+        }
+    };
 
     return (
+        <AlertDialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
         <div className="p-8 space-y-6 min-h-screen bg-slate-50 font-sans text-slate-900">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -79,6 +111,10 @@ export default function AdminListingsPage() {
                     <Button variant="outline" className="bg-white">
                         <Filter className="w-4 h-4 mr-2" />
                         Filter
+                    </Button>
+                    <Button className="bg-brand-primary text-white hover:bg-brand-primary/90" onClick={() => setIsCreating(true)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Listing
                     </Button>
                 </div>
             </div>
@@ -153,6 +189,22 @@ export default function AdminListingsPage() {
                                                     </Button>
                                                 </>
                                             )}
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                                onClick={() => setEditingListing(listing)}
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                                onClick={() => setDeletingId(listing.id)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100 text-slate-400">
                                                 <MoreVertical className="w-4 h-4" />
                                             </Button>
@@ -164,6 +216,44 @@ export default function AdminListingsPage() {
                     </TableBody>
                 </Table>
             </Card>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the listing.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => deletingId && handleDelete(deletingId)}
+                        className="bg-red-600 hover:bg-red-700"
+                    >
+                        Delete
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
         </div>
+
+        {/* Create/Edit Form */}
+        {(isCreating || editingListing) && (
+            <ListOutfitForm
+                initialData={editingListing ? {
+                    ...editingListing,
+                    // Map fields if necessary, as local Listing type is minimal
+                    pricePerDay: editingListing.price
+                } as any : undefined}
+                onComplete={() => {
+                    setIsCreating(false);
+                    setEditingListing(null);
+                    // Refresh listings or update local state
+                }}
+                onCancel={() => {
+                    setIsCreating(false);
+                    setEditingListing(null);
+                }}
+            />
+        )}
+        </AlertDialog>
     );
 }
