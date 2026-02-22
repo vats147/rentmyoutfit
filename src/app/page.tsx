@@ -89,7 +89,7 @@ export default function HomePage() {
       try {
         setLoadingListings(true);
         // Note: Using localhost for development fallback
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api';
         const res = await fetch(`${apiUrl}/listings`);
         if (!res.ok) throw new Error('Failed to fetch listings');
 
@@ -577,7 +577,7 @@ export default function HomePage() {
               <Star className="w-5 h-5 text-[#C9A84C] fill-[#C9A84C]" />
               <h2 className="font-semibold text-lg text-gray-900">Top Rated Near You</h2>
             </div>
-            <Button variant="ghost" size="sm" className="text-[#1B4332]" onClick={() => router.push('/explore')}>
+            <Button variant="ghost" size="sm" className="text-[#1B4332]" onClick={() => window.location.href = '/explore?gender=men'}>
               View all <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
