@@ -28,6 +28,7 @@ import {
 import { useAuthStore } from '@/stores';
 import { PLATFORM_CONFIG } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 
 interface AdminStats {
   totalUsers: number;
@@ -38,42 +39,6 @@ interface AdminStats {
   disputes: number;
 }
 
-// Mock data for admin dashboard
-const mockStats: AdminStats = {
-  totalUsers: 1247,
-  activeListings: 389,
-  pendingReviews: 23,
-  totalBookings: 892,
-  revenue: 284750,
-  disputes: 7,
-};
-
-const mockUsers = [
-  { id: '1', name: 'Priya Sharma', email: 'priya@email.com', phone: '+91 98765 43210', role: 'both', status: 'active', listings: 12, joined: '2024-01-15' },
-  { id: '2', name: 'Raj Malhotra', email: 'raj@email.com', phone: '+91 87654 32109', role: 'seller', status: 'active', listings: 8, joined: '2024-02-20' },
-  { id: '3', name: 'Anjali Patel', email: 'anjali@email.com', phone: '+91 76543 21098', role: 'customer', status: 'hold', listings: 0, joined: '2024-03-10' },
-  { id: '4', name: 'Vikram Singh', email: 'vikram@email.com', phone: '+91 65432 10987', role: 'seller', status: 'banned', listings: 5, joined: '2024-01-25' },
-  { id: '5', name: 'Meera Gupta', email: 'meera@email.com', phone: '+91 54321 09876', role: 'both', status: 'active', listings: 15, joined: '2024-02-05' },
-];
-
-const mockListings = [
-  { id: '1', title: 'Bridal Red Lehenga Choli', seller: 'Priya Sharma', status: 'active', price: 1500, views: 234, category: 'Lehenga Choli' },
-  { id: '2', title: 'Designer Sherwani Set', seller: 'Raj Malhotra', status: 'pending_review', price: 1200, views: 156, category: 'Sherwani' },
-  { id: '3', title: 'Pink Anarkali Suit', seller: 'Anjali Patel', status: 'paused', price: 800, views: 89, category: 'Anarkali' },
-  { id: '4', title: 'Royal Blue Bandhgala', seller: 'Vikram Singh', status: 'delisted', price: 1000, views: 67, category: 'Bandhgala' },
-];
-
-const mockBookings = [
-  { id: '1', listing: 'Bridal Lehenga', customer: 'Krina Desai', seller: 'Priya Sharma', dates: '15-17 Mar', status: 'rented', amount: 4500 },
-  { id: '2', listing: 'Sherwani Set', customer: 'Amit Kumar', seller: 'Raj Malhotra', dates: '18-19 Mar', status: 'otp_pending', amount: 2400 },
-  { id: '3', listing: 'Anarkali Suit', customer: 'Neha Singh', seller: 'Anjali Patel', dates: '20-22 Mar', status: 'deposit_paid', amount: 2400 },
-  { id: '4', listing: 'Banarasi Saree', customer: 'Riya Sharma', seller: 'Meera Gupta', dates: '23-24 Mar', status: 'returned', amount: 1200 },
-];
-
-const mockDisputes = [
-  { id: '1', booking: 'BK-001', customer: 'Krina Desai', seller: 'Priya Sharma', reason: 'Damaged outfit', status: 'open', created: '2024-03-15' },
-  { id: '2', booking: 'BK-002', customer: 'Amit Kumar', seller: 'Raj Malhotra', reason: 'Late return', status: 'under_review', created: '2024-03-14' },
-];
 
 interface AdminPanelProps {
   onLogout?: () => void;
@@ -82,8 +47,87 @@ interface AdminPanelProps {
 export function AdminPanel({ onLogout }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState<typeof mockUsers[0] | null>(null);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserDetail, setShowUserDetail] = useState(false);
+  const [stats, setStats] = useState<AdminStats>({
+    totalUsers: 0,
+    activeListings: 0,
+    pendingReviews: 0,
+    totalBookings: 0,
+    revenue: 0,
+    disputes: 0,
+  });
+  const [users, setUsers] = useState<any[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [disputes, setDisputes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        setLoading(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token || '';
+        const headers = { 'Authorization': `Bearer ${token}` };
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api';
+
+        // Stats
+        const statsRes = await fetch(`${apiUrl}/admin/stats`, { headers });
+        if (statsRes.ok) {
+          const body = await statsRes.json();
+          setStats(prev => ({
+            ...prev,
+            ...body.data.stats,
+            activeListings: body.data.stats.totalListings,
+            revenue: body.data.stats.revenue
+          }));
+        }
+
+        // Users
+        const usersRes = await fetch(`${apiUrl}/admin/users`, { headers });
+        if (usersRes.ok) {
+          const body = await usersRes.json();
+          setUsers(body.data.users.map((u: any) => ({
+            id: u.id,
+            name: u.displayName || u.username || 'User',
+            email: u.email,
+            phone: u.phone || 'N/A',
+            role: u.role,
+            status: u.isBanned ? 'banned' : 'active',
+            listings: u._count?.listings || 0,
+            joined: new Date(u.createdAt).toLocaleDateString()
+          })));
+        }
+
+        // Listings (Pending/Drafts)
+        const listingsRes = await fetch(`${apiUrl}/admin/pending-listings`, { headers });
+        if (listingsRes.ok) {
+          const body = await listingsRes.json();
+          setListings(body.data.listings.map((l: any) => ({
+            id: l.id,
+            title: l.title,
+            seller: l.seller?.displayName || l.seller?.email || 'Unknown',
+            status: l.status,
+            price: l.pricePerDay,
+            views: 0,
+            category: l.category
+          })));
+        }
+
+        // Empty fallbacks for endpoints not currently connected:
+        setBookings([]);
+        setDisputes([]);
+
+      } catch (err) {
+        console.error("Admin fetch error", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdminData();
+  }, []);
 
   // Configuration state
   const [config, setConfig] = useState({
@@ -125,12 +169,12 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
     <div className="space-y-6">
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {renderStatCard('Total Users', mockStats.totalUsers.toLocaleString(), <Users className="w-6 h-6 text-[#1B4332]" />, 12)}
-        {renderStatCard('Active Listings', mockStats.activeListings, <Package className="w-6 h-6 text-[#1B4332]" />, 8)}
-        {renderStatCard('Pending Reviews', mockStats.pendingReviews, <Clock className="w-6 h-6 text-amber-600" />)}
-        {renderStatCard('Total Bookings', mockStats.totalBookings, <Activity className="w-6 h-6 text-[#1B4332]" />, 23)}
-        {renderStatCard('Revenue', `Rs.${mockStats.revenue.toLocaleString()}`, <DollarSign className="w-6 h-6 text-[#C9A84C]" />, 18)}
-        {renderStatCard('Open Disputes', mockStats.disputes, <AlertTriangle className="w-6 h-6 text-red-500" />)}
+        {renderStatCard('Total Users', stats.totalUsers.toLocaleString(), <Users className="w-6 h-6 text-[#1B4332]" />, 12)}
+        {renderStatCard('Active Listings', stats.activeListings, <Package className="w-6 h-6 text-[#1B4332]" />, 8)}
+        {renderStatCard('Pending Reviews', stats.pendingReviews, <Clock className="w-6 h-6 text-amber-600" />)}
+        {renderStatCard('Total Bookings', stats.totalBookings, <Activity className="w-6 h-6 text-[#1B4332]" />, 23)}
+        {renderStatCard('Revenue', `Rs.${stats.revenue.toLocaleString()}`, <DollarSign className="w-6 h-6 text-[#C9A84C]" />, 18)}
+        {renderStatCard('Open Disputes', stats.disputes, <AlertTriangle className="w-6 h-6 text-red-500" />)}
       </div>
 
       {/* Charts Row */}
@@ -198,9 +242,9 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center",
                   activity.type === 'user' ? 'bg-blue-100' :
-                  activity.type === 'listing' ? 'bg-green-100' :
-                  activity.type === 'booking' ? 'bg-purple-100' :
-                  activity.type === 'dispute' ? 'bg-red-100' : 'bg-yellow-100'
+                    activity.type === 'listing' ? 'bg-green-100' :
+                      activity.type === 'booking' ? 'bg-purple-100' :
+                        activity.type === 'dispute' ? 'bg-red-100' : 'bg-yellow-100'
                 )}>
                   {activity.type === 'user' && <Users className="w-4 h-4 text-blue-600" />}
                   {activity.type === 'listing' && <Package className="w-4 h-4 text-green-600" />}
@@ -250,7 +294,7 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {mockUsers.filter(u => 
+                {users.filter(u =>
                   u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   u.email.toLowerCase().includes(searchQuery.toLowerCase())
                 ).map((user) => (
@@ -272,8 +316,8 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                     <td className="px-4 py-3">
                       <Badge className={cn(
                         user.status === 'active' ? 'bg-green-100 text-green-800' :
-                        user.status === 'hold' ? 'bg-amber-100 text-amber-800' :
-                        'bg-red-100 text-red-800'
+                          user.status === 'hold' ? 'bg-amber-100 text-amber-800' :
+                            'bg-red-100 text-red-800'
                       )}>
                         {user.status}
                       </Badge>
@@ -451,7 +495,7 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {mockListings.map((listing) => (
+                {listings.map((listing) => (
                   <tr key={listing.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-sm">{listing.title}</p>
@@ -463,9 +507,9 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                     <td className="px-4 py-3">
                       <Badge className={cn(
                         listing.status === 'active' ? 'bg-green-100 text-green-800' :
-                        listing.status === 'pending_review' ? 'bg-amber-100 text-amber-800' :
-                        listing.status === 'paused' ? 'bg-gray-100 text-gray-800' :
-                        'bg-red-100 text-red-800'
+                          listing.status === 'pending_review' ? 'bg-amber-100 text-amber-800' :
+                            listing.status === 'paused' ? 'bg-gray-100 text-gray-800' :
+                              'bg-red-100 text-red-800'
                       )}>
                         {listing.status.replace('_', ' ')}
                       </Badge>
@@ -515,7 +559,7 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {mockBookings.map((booking) => (
+                {bookings.map((booking) => (
                   <tr key={booking.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-sm">{booking.listing}</p>
@@ -527,9 +571,9 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                     <td className="px-4 py-3">
                       <Badge className={cn(
                         booking.status === 'rented' ? 'bg-blue-100 text-blue-800' :
-                        booking.status === 'otp_pending' ? 'bg-amber-100 text-amber-800' :
-                        booking.status === 'deposit_paid' ? 'bg-purple-100 text-purple-800' :
-                        'bg-green-100 text-green-800'
+                          booking.status === 'otp_pending' ? 'bg-amber-100 text-amber-800' :
+                            booking.status === 'deposit_paid' ? 'bg-purple-100 text-purple-800' :
+                              'bg-green-100 text-green-800'
                       )}>
                         {booking.status.replace('_', ' ')}
                       </Badge>
@@ -551,7 +595,7 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
 
   const renderDisputes = () => (
     <div className="space-y-4">
-      {mockDisputes.map((dispute) => (
+      {disputes.map((dispute) => (
         <Card key={dispute.id}>
           <CardContent className="p-4">
             <div className="flex items-start justify-between">
@@ -559,7 +603,7 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge className={cn(
                     dispute.status === 'open' ? 'bg-red-100 text-red-800' :
-                    'bg-amber-100 text-amber-800'
+                      'bg-amber-100 text-amber-800'
                   )}>
                     {dispute.status}
                   </Badge>
@@ -777,8 +821,8 @@ export function AdminPanel({ onLogout }: AdminPanelProps) {
                 onClick={() => setActiveTab(item.id)}
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
-                  activeTab === item.id 
-                    ? "bg-[#1B4332] text-white" 
+                  activeTab === item.id
+                    ? "bg-[#1B4332] text-white"
                     : "text-gray-600 hover:bg-gray-100"
                 )}
               >
