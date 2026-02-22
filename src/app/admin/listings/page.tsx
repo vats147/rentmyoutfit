@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
     Search,
     Filter,
@@ -43,50 +43,92 @@ import { cn } from "@/lib/utils";
 interface Listing {
     id: string;
     title: string;
-    seller: string;
+    seller: { id: string; displayName: string | null } | null;
     category: string;
-    price: number;
-    views: number;
+    pricePerDay: number;
     status: string;
+    _count?: { bookings: number; reviews: number };
 }
+
+const ADMIN_HEADERS = { 'x-admin-token': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'admin-secret' };
 
 export default function AdminListingsPage() {
     const [listings, setListings] = useState<Listing[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
-    const [editingListing, setEditingListing] = useState<Listing | null>(null);
-    const [isCreating, setIsCreating] = useState(false);
+
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+   
+    const fetchListings = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/admin/listings?limit=50', { headers: ADMIN_HEADERS });
+            const json = await res.json();
+            if (json.success) {
+                setListings(json.data);
+            } else {
+                setError(json.error || 'Failed to load listings');
+            }
+        } catch {
+            setError('Failed to connect to server');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        // Mock data for now - will connect to real API
-        setTimeout(() => {
-            setListings([
-                { id: "1", title: "Bridal Red Lehenga Choli", seller: "Priya Sharma", category: "Lehenga Choli", price: 1500, views: 234, status: "active" },
-                { id: "2", title: "Designer Sherwani Set", seller: "Raj Malhotra", category: "Sherwani", price: 1200, views: 156, status: "pending_review" },
-                { id: "3", title: "Pink Anarkali Suit", seller: "Anjali Patel", category: "Anarkali", price: 800, views: 89, status: "paused" },
-                { id: "4", title: "Royal Blue Bandhgala", seller: "Vikram Singh", category: "Bandhgala", price: 1000, views: 67, status: "delisted" },
-            ]);
-            setLoading(false);
-        }, 800);
-    }, []);
+        fetchListings();
+    }, [fetchListings]);
 
     const filteredListings = useMemo(() => listings.filter(l =>
         l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.seller.toLowerCase().includes(searchQuery.toLowerCase())
+        (l.seller?.displayName ?? '').toLowerCase().includes(searchQuery.toLowerCase())
     ), [listings, searchQuery]);
 
     const handleDelete = async (id: string) => {
+        setActionLoading(id);
         try {
-            // Optimistic update
-            setListings(prev => prev.filter(l => l.id !== id));
+            const res = await fetch(`/api/admin/listings/${id}`, {
+                method: 'DELETE',
+                headers: ADMIN_HEADERS,
+            });
+            const json = await res.json();
+            if (json.success) {
+                setListings(prev => prev.filter(l => l.id !== id));
+            } else {
+                setError(json.error || 'Failed to delete listing');
+            }
+        } catch {
+            setError('Failed to connect to server');
+        } finally {
+            setActionLoading(null);
             setDeletingId(null);
+        }
+    };
 
-            // API call
-            await fetch(`/api/listings/${id}`, { method: 'DELETE' });
-        } catch (error) {
-            console.error("Failed to delete listing", error);
-            // Optionally revert state here if needed
+    const handleStatusChange = async (id: string, status: string) => {
+        setActionLoading(id);
+        try {
+            const res = await fetch(`/api/admin/listings/${id}`, {
+                method: 'PATCH',
+                headers: { ...ADMIN_HEADERS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status }),
+            });
+            const json = await res.json();
+            if (json.success) {
+                setListings(prev => prev.map(l => l.id === id ? { ...l, status } : l));
+            } else {
+                setError(json.error || 'Failed to update listing');
+            }
+        } catch {
+            setError('Failed to connect to server');
+        } finally {
+            setActionLoading(null);
+
         }
     };
 
@@ -108,9 +150,9 @@ export default function AdminListingsPage() {
                             className="pl-10 w-full md:w-64 bg-white"
                         />
                     </div>
-                    <Button variant="outline" className="bg-white">
+                    <Button variant="outline" className="bg-white" onClick={fetchListings}>
                         <Filter className="w-4 h-4 mr-2" />
-                        Filter
+                        Refresh
                     </Button>
                     <Button className="bg-brand-primary text-white hover:bg-brand-primary/90" onClick={() => setIsCreating(true)}>
                         <Plus className="w-4 h-4 mr-2" />
@@ -118,6 +160,12 @@ export default function AdminListingsPage() {
                     </Button>
                 </div>
             </div>
+
+            {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {error}
+                </div>
+            )}
 
             <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
                 <Table>
@@ -127,7 +175,7 @@ export default function AdminListingsPage() {
                             <TableHead className="font-bold text-slate-700">Seller</TableHead>
                             <TableHead className="font-bold text-slate-700">Category</TableHead>
                             <TableHead className="font-bold text-slate-700">Price/Day</TableHead>
-                            <TableHead className="font-bold text-slate-700">Views</TableHead>
+                            <TableHead className="font-bold text-slate-700">Bookings</TableHead>
                             <TableHead className="font-bold text-slate-700">Status</TableHead>
                             <TableHead className="font-bold text-slate-700 text-right">Actions</TableHead>
                         </TableRow>
@@ -139,6 +187,12 @@ export default function AdminListingsPage() {
                                     <TableCell colSpan={7} className="h-16 animate-pulse bg-slate-50/50" />
                                 </TableRow>
                             ))
+                        ) : filteredListings.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center text-slate-400">
+                                    No listings found
+                                </TableCell>
+                            </TableRow>
                         ) : (
                             filteredListings.map((listing) => (
                                 <TableRow key={listing.id} className="hover:bg-slate-50/80 transition-colors">
@@ -153,7 +207,7 @@ export default function AdminListingsPage() {
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <User className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="text-slate-600">{listing.seller}</span>
+                                            <span className="text-slate-600">{listing.seller?.displayName ?? 'Unknown'}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -162,8 +216,8 @@ export default function AdminListingsPage() {
                                             <span className="text-slate-600 text-sm">{listing.category}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-bold text-slate-800">₹{listing.price}</TableCell>
-                                    <TableCell className="text-slate-500 text-sm">{listing.views}</TableCell>
+                                    <TableCell className="font-bold text-slate-800">₹{listing.pricePerDay}</TableCell>
+                                    <TableCell className="text-slate-500 text-sm">{listing._count?.bookings ?? 0}</TableCell>
                                     <TableCell>
                                         <Badge className={cn(
                                             "capitalize font-bold text-[10px]",
@@ -181,10 +235,22 @@ export default function AdminListingsPage() {
                                             </Button>
                                             {listing.status === 'pending_review' && (
                                                 <>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-green-50 text-green-600">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 hover:bg-green-50 text-green-600"
+                                                        disabled={actionLoading === listing.id}
+                                                        onClick={() => handleStatusChange(listing.id, 'active')}
+                                                    >
                                                         <CheckCircle className="w-4 h-4" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50 text-red-600">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 hover:bg-red-50 text-red-600"
+                                                        disabled={actionLoading === listing.id}
+                                                        onClick={() => handleStatusChange(listing.id, 'delisted')}
+                                                    >
                                                         <XCircle className="w-4 h-4" />
                                                     </Button>
                                                 </>
@@ -201,12 +267,10 @@ export default function AdminListingsPage() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="h-8 w-8 hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                                disabled={actionLoading === listing.id}
                                                 onClick={() => setDeletingId(listing.id)}
                                             >
                                                 <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100 text-slate-400">
-                                                <MoreVertical className="w-4 h-4" />
                                             </Button>
                                         </div>
                                     </TableCell>
@@ -220,7 +284,7 @@ export default function AdminListingsPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete the listing.
+                        This action cannot be undone. This will permanently delete the listing from the database.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

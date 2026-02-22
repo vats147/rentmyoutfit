@@ -6,10 +6,10 @@ import { z } from 'zod';
 function isAdmin(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
   const adminToken = request.headers.get('x-admin-token');
-  
+  const expectedToken = process.env.ADMIN_SECRET || 'admin-secret';
   // For demo, accept a simple token
   // In production, verify JWT or session
-  return authHeader === 'Bearer admin-token' || adminToken === 'admin-secret';
+  return authHeader === `Bearer ${expectedToken}` || adminToken === expectedToken;
 }
 
 // GET /api/admin/stats - Get dashboard statistics
