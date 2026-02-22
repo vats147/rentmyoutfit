@@ -23,7 +23,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const { user, isAuthenticated, isLoading } = useAuthStore();
     const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
-    const DEV_USER_EMAIL = "vatsalmangukiya9003@gmail.com";
+    const DEV_USER_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
     useEffect(() => {
         if (!isLoading) {

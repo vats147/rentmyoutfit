@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
     Search,
     Filter,
@@ -10,8 +10,19 @@ import {
     XCircle,
     ShoppingBag,
     Tag,
-    User
+    User,
+    Trash2
 } from "lucide-react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
     Table,
@@ -40,6 +51,7 @@ export default function AdminListingsPage() {
     const [listings, setListings] = useState<Listing[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         // Mock data for now - will connect to real API
@@ -54,12 +66,18 @@ export default function AdminListingsPage() {
         }, 800);
     }, []);
 
-    const filteredListings = listings.filter(l =>
+    const filteredListings = useMemo(() => listings.filter(l =>
         l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.seller.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    ), [listings, searchQuery]);
+
+    const handleDelete = (id: string) => {
+        setListings(prev => prev.filter(l => l.id !== id));
+        setDeletingId(null);
+    };
 
     return (
+        <AlertDialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
         <div className="p-8 space-y-6 min-h-screen bg-slate-50 font-sans text-slate-900">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -153,6 +171,14 @@ export default function AdminListingsPage() {
                                                     </Button>
                                                 </>
                                             )}
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                                onClick={() => setDeletingId(listing.id)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100 text-slate-400">
                                                 <MoreVertical className="w-4 h-4" />
                                             </Button>
@@ -164,6 +190,24 @@ export default function AdminListingsPage() {
                     </TableBody>
                 </Table>
             </Card>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the listing.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => deletingId && handleDelete(deletingId)}
+                        className="bg-red-600 hover:bg-red-700"
+                    >
+                        Delete
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
         </div>
+        </AlertDialog>
     );
 }
