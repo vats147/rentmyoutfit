@@ -14,9 +14,11 @@ import Link from "next/link";
 
 interface Stats {
     totalUsers: number;
-    totalListings: number;
+    activeListings: number;
     totalBookings: number;
-    revenue: number;
+    pendingReviews: number;
+    openDisputes: number;
+    totalRevenue: number;
 }
 
 export default function AdminDashboard() {
@@ -24,23 +26,20 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Mocking the stats for now until auth is fully piped through
-        setTimeout(() => {
-            setStats({
-                totalUsers: 1250,
-                totalListings: 450,
-                totalBookings: 890,
-                revenue: 125000
-            });
-            setLoading(false);
-        }, 1000);
+        fetch('/api/admin', { headers: { 'x-admin-token': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'admin-secret' } })
+            .then(r => r.json())
+            .then(json => {
+                if (json.success) setStats(json.data.stats);
+            })
+            .catch(() => {})
+            .finally(() => setLoading(false));
     }, []);
 
     const statsCards = [
         { label: "Total Users", value: stats?.totalUsers, icon: Users, color: "bg-blue-50 text-blue-600" },
-        { label: "Active Listings", value: stats?.totalListings, icon: ShoppingBag, color: "bg-green-50 text-green-600" },
+        { label: "Active Listings", value: stats?.activeListings, icon: ShoppingBag, color: "bg-green-50 text-green-600" },
         { label: "Total Bookings", value: stats?.totalBookings, icon: Calendar, color: "bg-purple-50 text-purple-600" },
-        { label: "Platform Revenue", value: `₹${stats?.revenue?.toLocaleString()}`, icon: TrendingUp, color: "bg-brand-gold/10 text-brand-gold" },
+        { label: "Platform Revenue", value: stats?.totalRevenue !== undefined ? `₹${stats.totalRevenue.toLocaleString()}` : undefined, icon: TrendingUp, color: "bg-brand-gold/10 text-brand-gold" },
     ];
 
     return (
@@ -113,11 +112,11 @@ export default function AdminDashboard() {
                             <div className="flex items-center gap-3">
                                 <AlertTriangle className="text-amber-500 w-5 h-5" />
                                 <div>
-                                    <p className="text-sm font-bold text-amber-900">KYC Verifications</p>
-                                    <p className="text-xs text-amber-700">12 sellers waiting for approval</p>
+                                    <p className="text-sm font-bold text-amber-900">Listings Pending Review</p>
+                                    <p className="text-xs text-amber-700">{stats?.pendingReviews ?? 0} listings waiting for approval</p>
                                 </div>
                             </div>
-                            <button className="px-3 py-1 bg-white border border-amber-200 text-amber-700 rounded text-xs font-bold hover:bg-amber-100">Review</button>
+                            <Link href="/admin/listings" className="px-3 py-1 bg-white border border-amber-200 text-amber-700 rounded text-xs font-bold hover:bg-amber-100">Review</Link>
                         </div>
                         {/* Additional pending items */}
                     </div>

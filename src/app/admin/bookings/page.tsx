@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
     Calendar,
     Search,
     Filter,
-    MoreVertical,
     Eye,
     User,
     Package,
-    Clock,
-    CheckCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,37 +25,50 @@ import { cn } from "@/lib/utils";
 
 interface Booking {
     id: string;
-    listing: string;
-    customer: string;
-    seller: string;
-    dates: string;
-    amount: number;
+    listing: { id: string; title: string } | null;
+    customer: { id: string; displayName: string | null } | null;
+    seller: { id: string; displayName: string | null } | null;
+    startDate: string;
+    endDate: string;
+    totalPaid: number;
     status: string;
 }
+
+const ADMIN_HEADERS = { 'x-admin-token': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'admin-secret' };
 
 export default function AdminBookingsPage() {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        // Mock data for now
-        setTimeout(() => {
-            setBookings([
-                { id: "1", listing: "Bridal Lehenga", customer: "Krina Desai", seller: "Priya Sharma", dates: "15-17 Mar", status: "rented", amount: 4500 },
-                { id: "2", listing: "Sherwani Set", customer: "Amit Kumar", seller: "Raj Malhotra", dates: "18-19 Mar", status: "otp_pending", amount: 2400 },
-                { id: "3", listing: "Anarkali Suit", customer: "Neha Singh", seller: "Anjali Patel", dates: "20-22 Mar", status: "deposit_paid", amount: 2400 },
-                { id: "4", listing: "Banarasi Saree", customer: "Riya Sharma", seller: "Meera Gupta", dates: "23-24 Mar", status: "returned", amount: 1200 },
-            ]);
+    const fetchBookings = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/admin/bookings?limit=50', { headers: ADMIN_HEADERS });
+            const json = await res.json();
+            if (json.success) {
+                setBookings(json.data);
+            } else {
+                setError(json.error || 'Failed to load bookings');
+            }
+        } catch {
+            setError('Failed to connect to server');
+        } finally {
             setLoading(false);
-        }, 800);
+        }
     }, []);
 
-    const filteredBookings = bookings.filter(b =>
-        b.listing.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.seller.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    useEffect(() => {
+        fetchBookings();
+    }, [fetchBookings]);
+
+    const filteredBookings = useMemo(() => bookings.filter(b =>
+        (b.listing?.title ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.customer?.displayName ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (b.seller?.displayName ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+    ), [bookings, searchQuery]);
 
     return (
         <div className="p-8 space-y-6 min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -77,12 +87,18 @@ export default function AdminBookingsPage() {
                             className="pl-10 w-full md:w-64 bg-white"
                         />
                     </div>
-                    <Button variant="outline" className="bg-white">
+                    <Button variant="outline" className="bg-white" onClick={fetchBookings}>
                         <Filter className="w-4 h-4 mr-2" />
-                        Filter
+                        Refresh
                     </Button>
                 </div>
             </div>
+
+            {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {error}
+                </div>
+            )}
 
             <Card className="bg-white border-slate-200 shadow-sm overflow-hidden p-0">
                 <Table>
@@ -104,6 +120,12 @@ export default function AdminBookingsPage() {
                                     <TableCell colSpan={7} className="h-16 animate-pulse bg-slate-50/50" />
                                 </TableRow>
                             ))
+                        ) : filteredBookings.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center text-slate-400">
+                                    No bookings found
+                                </TableCell>
+                            </TableRow>
                         ) : (
                             filteredBookings.map((booking) => (
                                 <TableRow key={booking.id} className="hover:bg-slate-50/80 transition-colors">
@@ -113,48 +135,48 @@ export default function AdminBookingsPage() {
                                                 <Package className="w-5 h-5" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-800">{booking.listing}</p>
-                                                <p className="text-[10px] text-slate-400">ID: BK-00{booking.id}</p>
+                                                <p className="font-bold text-slate-800">{booking.listing?.title ?? 'Unknown'}</p>
+                                                <p className="text-[10px] text-slate-400">ID: {booking.id.slice(0, 8)}</p>
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <User className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="text-slate-600 text-sm">{booking.customer}</span>
+                                            <span className="text-slate-600 text-sm">{booking.customer?.displayName ?? 'Unknown'}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <User className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="text-slate-600 text-sm">{booking.seller}</span>
+                                            <span className="text-slate-600 text-sm">{booking.seller?.displayName ?? 'Unknown'}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="text-slate-600 text-sm">{booking.dates}</span>
+                                            <span className="text-slate-600 text-sm">
+                                                {new Date(booking.startDate).toLocaleDateString()} – {new Date(booking.endDate).toLocaleDateString()}
+                                            </span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-bold text-slate-800">₹{booking.amount}</TableCell>
+                                    <TableCell className="font-bold text-slate-800">₹{booking.totalPaid}</TableCell>
                                     <TableCell>
                                         <Badge className={cn(
                                             "capitalize font-bold text-[10px]",
                                             booking.status === 'rented' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                                 booking.status === 'otp_pending' ? 'bg-amber-100 text-amber-700 border-amber-200' :
                                                     booking.status === 'deposit_paid' ? 'bg-purple-100 text-purple-700 border-purple-200' :
-                                                        'bg-green-100 text-green-700 border-green-200'
+                                                        booking.status === 'returned' ? 'bg-green-100 text-green-700 border-green-200' :
+                                                            'bg-slate-100 text-slate-700 border-slate-200'
                                         )} variant="outline">
-                                            {booking.status.replace('_', ' ')}
+                                            {booking.status.replace(/_/g, ' ')}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">
                                             <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100">
                                                 <Eye className="w-4 h-4 text-slate-400" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100 text-slate-400">
-                                                <MoreVertical className="w-4 h-4" />
                                             </Button>
                                         </div>
                                     </TableCell>

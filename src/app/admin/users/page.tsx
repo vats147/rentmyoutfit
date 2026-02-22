@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
     Users,
     Search,
     Filter,
-    MoreVertical,
     ShieldAlert,
     UserCheck,
+    UserX,
     Mail,
-    Phone
+    Phone,
+    ShieldCheck,
+    Pause
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
     Table,
     TableBody,
@@ -29,51 +32,64 @@ interface User {
     role: string;
     kycStatus: string;
     isBanned: boolean;
+    isHoldSelling: boolean;
     createdAt: string;
+    _count?: { listings: number; bookingsAsCustomer: number };
 }
+
+const ADMIN_HEADERS = { 'x-admin-token': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'admin-secret', 'Content-Type': 'application/json' };
 
 export default function AdminUsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchUsers = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const params = new URLSearchParams({ limit: '50' });
+            if (searchQuery) params.set('search', searchQuery);
+            const res = await fetch(`/api/admin/users?${params}`, { headers: ADMIN_HEADERS });
+            const json = await res.json();
+            if (json.success) {
+                setUsers(json.data);
+            } else {
+                setError(json.error || 'Failed to load users');
+            }
+        } catch {
+            setError('Failed to connect to server');
+        } finally {
+            setLoading(false);
+        }
+    }, [searchQuery]);
 
     useEffect(() => {
-        // Mocking for now - will connect to real /api/admin/users
-        setTimeout(() => {
-            setUsers([
-                {
-                    id: "1",
-                    displayName: "Rahul Mehta",
-                    email: "rahul@example.com",
-                    phone: "+91 9876543210",
-                    role: "admin",
-                    kycStatus: "verified",
-                    isBanned: false,
-                    createdAt: "2024-01-10T10:00:00Z"
-                },
-                {
-                    id: "2",
-                    displayName: "Sanya Patel",
-                    email: "sanya@example.com",
-                    phone: "+91 8765432109",
-                    role: "seller",
-                    kycStatus: "pending",
-                    isBanned: false,
-                    createdAt: "2024-02-15T12:30:00Z"
-                },
-                {
-                    id: "3",
-                    displayName: "Amit Shah",
-                    email: "amit@example.com",
-                    phone: "+91 7654321098",
-                    role: "customer",
-                    kycStatus: "rejected",
-                    isBanned: true,
-                    createdAt: "2024-03-01T08:15:00Z"
-                }
-            ]);
-            setLoading(false);
-        }, 800);
-    }, []);
+        fetchUsers();
+    }, [fetchUsers]);
+
+    const handleAction = async (userId: string, action: string) => {
+        setActionLoading(userId + action);
+        try {
+            const res = await fetch(`/api/admin/users/${userId}`, {
+                method: 'PATCH',
+                headers: ADMIN_HEADERS,
+                body: JSON.stringify({ action }),
+            });
+            const json = await res.json();
+            if (json.success) {
+                setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...json.data } : u));
+            } else {
+                setError(json.error || 'Failed to update user');
+            }
+        } catch {
+            setError('Failed to connect to server');
+        } finally {
+            setActionLoading(null);
+        }
+    };
 
     return (
         <div className="p-8 space-y-6 min-h-screen bg-slate-50 font-sans">
@@ -88,14 +104,25 @@ export default function AdminUsersPage() {
                         <input
                             type="text"
                             placeholder="Search users..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/50 transition-all w-64"
                         />
                     </div>
-                    <button className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                    <button
+                        onClick={fetchUsers}
+                        className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
                         <Filter className="w-4 h-4 text-slate-600" />
                     </button>
                 </div>
             </div>
+
+            {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {error}
+                </div>
+            )}
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <Table>
@@ -104,6 +131,7 @@ export default function AdminUsersPage() {
                             <TableHead className="font-bold text-slate-700">User</TableHead>
                             <TableHead className="font-bold text-slate-700">Role</TableHead>
                             <TableHead className="font-bold text-slate-700">KYC Status</TableHead>
+                            <TableHead className="font-bold text-slate-700">Listings</TableHead>
                             <TableHead className="font-bold text-slate-700">Joined</TableHead>
                             <TableHead className="font-bold text-slate-700 text-right">Actions</TableHead>
                         </TableRow>
@@ -112,9 +140,15 @@ export default function AdminUsersPage() {
                         {loading ? (
                             [1, 2, 3].map((i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={5} className="h-16 animate-pulse bg-slate-50/50" />
+                                    <TableCell colSpan={6} className="h-16 animate-pulse bg-slate-50/50" />
                                 </TableRow>
                             ))
+                        ) : users.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center text-slate-400">
+                                    No users found
+                                </TableCell>
+                            </TableRow>
                         ) : (
                             users.map((user) => (
                                 <TableRow key={user.id} className="hover:bg-slate-50/80 transition-colors">
@@ -152,12 +186,72 @@ export default function AdminUsersPage() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-slate-500 text-sm">
+                                        {user._count?.listings ?? 0}
+                                    </TableCell>
+                                    <TableCell className="text-slate-500 text-sm">
                                         {new Date(user.createdAt).toLocaleDateString()}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <button className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                                            <MoreVertical className="w-4 h-4 text-slate-400" />
-                                        </button>
+                                        <div className="flex justify-end gap-1">
+                                            {user.kycStatus !== 'verified' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 hover:bg-green-50 text-green-600"
+                                                    title="Verify KYC"
+                                                    disabled={actionLoading === user.id + 'verify_kyc'}
+                                                    onClick={() => handleAction(user.id, 'verify_kyc')}
+                                                >
+                                                    <ShieldCheck className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                            {user.isBanned ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 hover:bg-green-50 text-green-600"
+                                                    title="Unban User"
+                                                    disabled={actionLoading === user.id + 'unban'}
+                                                    onClick={() => handleAction(user.id, 'unban')}
+                                                >
+                                                    <UserCheck className="w-4 h-4" />
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 hover:bg-red-50 text-red-600"
+                                                    title="Ban User"
+                                                    disabled={actionLoading === user.id + 'ban'}
+                                                    onClick={() => handleAction(user.id, 'ban')}
+                                                >
+                                                    <UserX className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                            {user.isHoldSelling ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 hover:bg-green-50 text-slate-400"
+                                                    title="Release Selling Hold"
+                                                    disabled={actionLoading === user.id + 'release_hold'}
+                                                    onClick={() => handleAction(user.id, 'release_hold')}
+                                                >
+                                                    <Pause className="w-4 h-4" />
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 hover:bg-amber-50 text-slate-400 hover:text-amber-600"
+                                                    title="Hold Selling"
+                                                    disabled={actionLoading === user.id + 'hold_selling'}
+                                                    onClick={() => handleAction(user.id, 'hold_selling')}
+                                                >
+                                                    <Pause className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
