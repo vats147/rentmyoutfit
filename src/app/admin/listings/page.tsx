@@ -11,8 +11,11 @@ import {
     ShoppingBag,
     Tag,
     User,
-    Trash2
+    Trash2,
+    Plus,
+    Pencil
 } from "lucide-react";
+import { ListOutfitForm } from "@/components/listings/list-outfit-form";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -54,9 +57,11 @@ export default function AdminListingsPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
+
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+   
     const fetchListings = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -123,6 +128,7 @@ export default function AdminListingsPage() {
             setError('Failed to connect to server');
         } finally {
             setActionLoading(null);
+
         }
     };
 
@@ -147,6 +153,10 @@ export default function AdminListingsPage() {
                     <Button variant="outline" className="bg-white" onClick={fetchListings}>
                         <Filter className="w-4 h-4 mr-2" />
                         Refresh
+                    </Button>
+                    <Button className="bg-brand-primary text-white hover:bg-brand-primary/90" onClick={() => setIsCreating(true)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Listing
                     </Button>
                 </div>
             </div>
@@ -248,6 +258,14 @@ export default function AdminListingsPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
+                                                className="h-8 w-8 hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                                onClick={() => setEditingListing(listing)}
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
                                                 className="h-8 w-8 hover:bg-red-50 text-slate-400 hover:text-red-600"
                                                 disabled={actionLoading === listing.id}
                                                 onClick={() => setDeletingId(listing.id)}
@@ -280,6 +298,26 @@ export default function AdminListingsPage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </div>
+
+        {/* Create/Edit Form */}
+        {(isCreating || editingListing) && (
+            <ListOutfitForm
+                initialData={editingListing ? {
+                    ...editingListing,
+                    // Map fields if necessary, as local Listing type is minimal
+                    pricePerDay: editingListing.price
+                } as any : undefined}
+                onComplete={() => {
+                    setIsCreating(false);
+                    setEditingListing(null);
+                    // Refresh listings or update local state
+                }}
+                onCancel={() => {
+                    setIsCreating(false);
+                    setEditingListing(null);
+                }}
+            />
+        )}
         </AlertDialog>
     );
 }
