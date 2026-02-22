@@ -1,0 +1,439 @@
+// ShahidRa Rentals - Database Schema
+// Peer-to-peer ethnic outfit rental marketplace
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  phone         String?   @unique
+  email         String?   @unique
+  googleId      String?   @unique
+  displayName   String?
+  username      String?   @unique
+  profileImage  String?
+  gender        String?   // male | female | other
+  role          String    @default("customer") // customer | seller | both
+  kycStatus     String    @default("pending") // pending | verified | rejected
+  isBanned      Boolean   @default(false)
+  isHoldSelling Boolean   @default(false)
+  banReason     String?
+  referralCode  String?   @unique
+  referredById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  address       Address?
+  listings      Listing[]
+  bookingsAsCustomer Booking[]  @relation("CustomerBookings")
+  bookingsAsSeller   Booking[]  @relation("SellerBookings")
+  wallet        Wallet?
+  ipLogs        IpLog[]
+  reviews       Review[]   @relation("UserReviews")
+  reviewVotes   ReviewVote[]
+  notifications Notification[]
+  referralEarnings ReferralEarning[]
+  referredBy    User?      @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals     User[]     @relation("UserReferrals")
+
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+}
+
+model Address {
+  id        String  @id @default(uuid())
+  userId    String  @unique
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  lat       Float?
+  lng       Float?
+  verified  Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model IpLog {
+  id        String   @id @default(uuid())
+  userId    String
+  ip        String
+  deviceId  String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([ip])
+  @@index([deviceId])
+  @@index([userId])
+}
+
+// ============================================
+// LISTINGS / CATALOGUE
+// ============================================
+
+model Listing {
+  id            String   @id @default(uuid())
+  sellerId      String
+  title         String
+  description   String?
+  category      String   // lehenga_choli, saree, kurti_set, sherwani, etc.
+  gender        String   // women | men | kids
+  eventTags     String   // comma-separated: marriage,engagement,birthday
+  customTags    String?  // comma-separated: handicraft,embroidery,bridal
+  size          String?
+  measurements  String?  // JSON string: { waist, chest, length }
+  color         String?
+  fabric        String?
+  condition     String   @default("good") // like_new | good | fair
+  pricePerDay   Float
+  pricePerWeek  Float?
+  deposit       Float
+  deliveryType  String   @default("pickup") // pickup | delivery | both
+  serviceRadius Float?   // km
+  deliveryCharge Float?
+  status        String   @default("pending_review") // draft | pending_review | active | paused | delisted
+  lat           Float?
+  lng           Float?
+  viewCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  seller        User           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  images        ListingImage[]
+  videos        ListingVideo[]
+  availability  ListingAvailability[]
+  bookings      Booking[]
+  reviews       Review[]       @relation("ListingReviews")
+
+  @@index([sellerId])
+  @@index([category])
+  @@index([gender])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ListingImage {
+  id        String   @id @default(uuid())
+  listingId String
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+model ListingVideo {
+  id        String   @id @default(uuid())
+  listingId String
+  url       String
+  thumbnail String?
+  createdAt DateTime @default(now())
+
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+model ListingAvailability {
+  id          String   @id @default(uuid())
+  listingId   String
+  startDate   DateTime
+  endDate     DateTime
+  reason      String?  // blocked by owner, booked, etc.
+  createdAt   DateTime @default(now())
+
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+// ============================================
+// BOOKINGS & TRANSACTIONS
+// ============================================
+
+model Booking {
+  id              String   @id @default(uuid())
+  listingId       String
+  customerId      String
+  sellerId        String
+  startDate       DateTime
+  endDate         DateTime
+  rentalAmount    Float
+  depositAmount   Float
+  platformFee     Float
+  deliveryCharge  Float    @default(0)
+  totalPaid       Float
+  status          String   @default("initiated")
+  // initiated -> deposit_paid -> otp_pending -> otp_verified -> rented -> return_initiated -> returned -> deposit_released
+  deliveryType    String   @default("pickup")
+  deliveryAddress String?
+  pickupOtp       String?
+  returnOtp       String?
+  depositReleased Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  listing         Listing       @relation(fields: [listingId], references: [id])
+  customer        User          @relation("CustomerBookings", fields: [customerId], references: [id])
+  seller          User          @relation("SellerBookings", fields: [sellerId], references: [id])
+  transaction     Transaction?
+  reviews         Review[]      @relation("BookingReviews")
+  dispute         Dispute?
+
+  @@index([listingId])
+  @@index([customerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Transaction {
+  id                String   @id @default(uuid())
+  bookingId         String   @unique
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  amount            Float
+  status            String   @default("created") // created | paid | refunded | failed
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  booking           Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([razorpayOrderId])
+  @@index([status])
+}
+
+model Dispute {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  openedBy    String   // customer | seller
+  reason      String
+  description String?
+  status      String   @default("open") // open | under_review | resolved
+  resolution  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  booking     Booking      @relation(fields: [bookingId], references: [id])
+  evidence    DisputeEvidence[]
+
+  @@index([status])
+}
+
+model DisputeEvidence {
+  id         String   @id @default(uuid())
+  disputeId  String
+  uploadedBy String   // customer | seller
+  type       String   // image | video | text
+  url        String?
+  text       String?
+  createdAt  DateTime @default(now())
+
+  dispute    Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+}
+
+// ============================================
+// REVIEWS & RATINGS
+// ============================================
+
+model Review {
+  id          String   @id @default(uuid())
+  bookingId   String
+  authorId    String
+  targetType  String   // listing | customer
+  targetId    String
+  listingId   String
+  rating      Int      // 1-5
+  text        String?
+  tags        String?  // comma-separated
+  isVisible   Boolean  @default(false) // blind review system
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User          @relation("UserReviews", fields: [authorId], references: [id])
+  booking     Booking       @relation("BookingReviews", fields: [bookingId], references: [id])
+  listing     Listing       @relation("ListingReviews", fields: [listingId], references: [id])
+  media       ReviewMedia[]
+  votes       ReviewVote[]
+
+  @@index([listingId])
+  @@index([authorId])
+  @@index([targetId])
+}
+
+model ReviewMedia {
+  id        String   @id @default(uuid())
+  reviewId  String
+  type      String   // image | video
+  url       String
+  thumbnail String?
+  createdAt DateTime @default(now())
+
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+}
+
+model ReviewVote {
+  id        String   @id @default(uuid())
+  reviewId  String
+  userId    String
+  helpful   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])
+  @@index([reviewId])
+}
+
+// ============================================
+// WALLET & REFERRALS
+// ============================================
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  txns      WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  walletId    String
+  type        String   // credit | debit
+  amount      Float
+  reason      String   // referral | refund | dispute_resolution | booking_payment
+  referenceId String?  // booking_id or referral_id
+  createdAt   DateTime @default(now())
+
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([referenceId])
+}
+
+model ReferralEarning {
+  id            String   @id @default(uuid())
+  referrerId    String
+  referredId    String
+  rewardType    String   // discount | credit
+  rewardAmount  Float
+  status        String   @default("pending") // pending | credited
+  createdAt     DateTime @default(now())
+
+  referrer      User     @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
+  @@index([referredId])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // booking | otp | deposit | review | referral | promo | warning
+  title     String
+  body      String
+  data      String?  // JSON string for additional data
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+// ============================================
+// ADMIN CONFIGURATION
+// ============================================
+
+model AdminConfig {
+  key       String   @id
+  value     String
+  dataType  String   @default("string") // string | number | boolean | json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  enabled     Boolean  @default(false)
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model AdminUser {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("admin") // admin | superadmin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+}
+
+// ============================================
+// SAVED / WISHLIST
+// ============================================
+
+model SavedListing {
+  id        String   @id @default(uuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([userId])
+}
+
+// ============================================
+// EVENT DATES (for retargeting)
+// ============================================
+
+model UserEventDate {
+  id          String   @id @default(uuid())
+  userId      String
+  eventType   String   // marriage, engagement, sangeet, mehndi, birthday, etc.
+  eventDate   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([eventDate])
+}

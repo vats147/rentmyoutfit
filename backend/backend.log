@@ -1,0 +1,13 @@
+38 | var clientVersion = version;
+39 | 
+40 | // src/scripts/default-index.ts
+41 | var PrismaClient = class {
+42 |   constructor() {
+43 |     throw new Error('@prisma/client did not initialize yet. Please run "prisma generate" and try to import it again.');
+                   ^
+error: @prisma/client did not initialize yet. Please run "prisma generate" and try to import it again.
+      at new PrismaClient (/Users/vats/Downloads/workspace-bc228e22-3a0d-4de9-ac47-fbb7690cc166/backend/node_modules/.prisma/client/default.js:43:15)
+      at /Users/vats/Downloads/workspace-bc228e22-3a0d-4de9-ac47-fbb7690cc166/backend/src/app.ts:15:16
+      at loadAndEvaluateModule (2:1)
+
+Bun v1.3.9 (macOS arm64)
